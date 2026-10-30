@@ -1,0 +1,15 @@
+# Dependências e builds
+node_modules/
+backend/dist/
+frontend/dist/
+
+# Segredos — NUNCA versionar
+backend/.env
+backend/.env.*
+!backend/.env.example
+deploy/criar-banco.sql
+
+# Logs e temporários
+*.log
+*.tmp
+*.bak*

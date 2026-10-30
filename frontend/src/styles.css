@@ -1,0 +1,265 @@
+@import 'tailwindcss';
+
+/*
+ * Design system — tokens semânticos.
+ *
+ * Linguagem visual herdada dos sistemas irmãos: fundo vinho radial e cards de
+ * vidro do Roval Escuta, tipografia Bodoni Moda (display) + Inter (texto),
+ * vermelho da marca Roval. Escuro é o padrão; o claro redefine os mesmos
+ * tokens em [data-tema='claro'] — nenhum componente conhece a cor crua.
+ */
+
+:root {
+  color-scheme: dark;
+
+  /* Superfícies */
+  --bg: #0e0909;
+  --bg-hero: radial-gradient(circle at 50% 38%, rgb(220 38 38 / 0.16) 0%, rgb(45 10 10 / 0.5) 42%, #0e0707 78%);
+  --bg-pagina: radial-gradient(120% 80% at 50% -10%, rgb(120 20 30 / 0.22) 0%, transparent 55%), #0e0909;
+  --card: rgb(255 255 255 / 0.035);
+  --card-forte: rgb(20 12 12 / 0.72);
+  --card-hover: rgb(255 255 255 / 0.06);
+  --campo: rgb(255 255 255 / 0.045);
+  --borda: rgb(255 255 255 / 0.09);
+  --borda-forte: rgb(255 255 255 / 0.16);
+
+  /* Texto (hierarquia) */
+  --fg: #f6f1f0;
+  --fg-2: rgb(246 241 240 / 0.66);
+  --fg-3: rgb(246 241 240 / 0.44);
+
+  /* Marca */
+  --marca: #dc2626;
+  --marca-forte: #b91c1c;
+  --marca-suave: rgb(220 38 38 / 0.16);
+  --marca-texto: #f28b8f;
+  --acento: #e0a9ad;
+
+  /* Faixas de nota (escopo §3.4) — cor + rótulo, nunca só cor */
+  --excelente: #34d399;
+  --excelente-bg: rgb(52 211 153 / 0.13);
+  --bom: #a3e635;
+  --bom-bg: rgb(163 230 53 / 0.12);
+  --regular: #fbbf24;
+  --regular-bg: rgb(251 191 36 / 0.13);
+  --critico: #f87171;
+  --critico-bg: rgb(248 113 113 / 0.14);
+  /* Texto sobre o vermelho CHEIO (mapa de calor): no escuro o vermelho é claro. */
+  --critico-sobre: #1c1412;
+
+  --sombra: 0 24px 60px -24px rgb(0 0 0 / 0.7), inset 0 1px 0 0 rgb(255 255 255 / 0.05);
+  --sombra-marca: 0 14px 30px -12px rgb(220 38 38 / 0.55);
+
+  /* Gráficos — paleta validada (dataviz: validate_palette.js, claro e escuro).
+     Azul/laranja e não o vermelho da marca: vermelho aqui já significa "Crítico". */
+  --serie-1: #3987e5;
+  --serie-2: #d95926;
+  --grade: rgb(255 255 255 / 0.07);
+  --eixo: rgb(246 241 240 / 0.44);
+}
+
+:root[data-tema='claro'] {
+  color-scheme: light;
+
+  --bg: #efeae7;
+  --bg-hero: radial-gradient(circle at 50% 38%, rgb(220 38 38 / 0.09) 0%, rgb(238 224 224 / 0.75) 42%, #ebe5e2 78%);
+  --bg-pagina: radial-gradient(120% 80% at 50% -10%, rgb(220 38 38 / 0.07) 0%, transparent 55%), #efeae7;
+  --card: rgb(255 255 255 / 0.62);
+  --card-forte: rgb(255 255 255 / 0.86);
+  --card-hover: rgb(255 255 255 / 0.9);
+  --campo: rgb(255 255 255 / 0.8);
+  --borda: rgb(40 20 18 / 0.1);
+  --borda-forte: rgb(40 20 18 / 0.18);
+
+  --fg: #1c1412;
+  --fg-2: rgb(28 20 18 / 0.68);
+  --fg-3: rgb(28 20 18 / 0.5);
+
+  --marca: #c01631;
+  --marca-forte: #9f1239;
+  --marca-suave: rgb(192 22 49 / 0.09);
+  --marca-texto: #b4122c;
+  --acento: #b91c1c;
+
+  --excelente: #047857;
+  --excelente-bg: rgb(4 120 87 / 0.1);
+  --bom: #4d7c0f;
+  --bom-bg: rgb(77 124 15 / 0.1);
+  --regular: #b45309;
+  --regular-bg: rgb(180 83 9 / 0.1);
+  --critico: #b91c1c;
+  --critico-bg: rgb(185 28 28 / 0.09);
+  --critico-sobre: #ffffff;
+
+  --sombra: 0 18px 40px -24px rgb(60 20 20 / 0.28), inset 0 1px 0 0 rgb(255 255 255 / 0.7);
+  --sombra-marca: 0 12px 26px -12px rgb(192 22 49 / 0.45);
+
+  --serie-1: #2a78d6;
+  --serie-2: #eb6834;
+  --grade: rgb(40 20 18 / 0.08);
+  --eixo: rgb(28 20 18 / 0.5);
+}
+
+/*
+ * Módulo Lojas: cor de destaque própria (índigo) para diferenciar de Vendedores
+ * (vermelho Roval) num relance. Só os tokens de DESTAQUE mudam — as cores das
+ * faixas (Excelente/Bom/Regular/Crítico) têm significado e ficam iguais.
+ * Índigo porque não colide com nenhuma cor de faixa.
+ */
+:root[data-modulo='lojas'] {
+  --marca: #6366f1;
+  --marca-forte: #4f46e5;
+  --marca-suave: rgb(99 102 241 / 0.18);
+  --marca-texto: #a5b4fc;
+  --acento: #a5b4fc;
+  --sombra-marca: 0 14px 30px -12px rgb(99 102 241 / 0.55);
+  --bg-pagina: radial-gradient(120% 80% at 50% -10%, rgb(55 48 163 / 0.28) 0%, transparent 55%), #0b0a12;
+  --bg: #0b0a12;
+}
+:root[data-modulo='lojas'][data-tema='claro'] {
+  --marca: #4f46e5;
+  --marca-forte: #3730a3;
+  --marca-suave: rgb(79 70 229 / 0.1);
+  --marca-texto: #4338ca;
+  --acento: #6366f1;
+  --sombra-marca: 0 12px 26px -12px rgb(79 70 229 / 0.45);
+  --bg-pagina: radial-gradient(120% 80% at 50% -10%, rgb(79 70 229 / 0.08) 0%, transparent 55%), #eeedf3;
+  --bg: #eeedf3;
+}
+
+@theme inline {
+  --font-sans: 'Inter Variable', system-ui, sans-serif;
+  --font-display: 'Bodoni Moda Variable', Georgia, serif;
+
+  --color-bg: var(--bg);
+  --color-card: var(--card);
+  --color-card-forte: var(--card-forte);
+  --color-card-hover: var(--card-hover);
+  --color-campo: var(--campo);
+  --color-borda: var(--borda);
+  --color-borda-forte: var(--borda-forte);
+  --color-fg: var(--fg);
+  --color-fg-2: var(--fg-2);
+  --color-fg-3: var(--fg-3);
+  --color-marca: var(--marca);
+  --color-marca-forte: var(--marca-forte);
+  --color-marca-suave: var(--marca-suave);
+  --color-marca-texto: var(--marca-texto);
+  --color-acento: var(--acento);
+  --color-excelente: var(--excelente);
+  --color-excelente-bg: var(--excelente-bg);
+  --color-bom: var(--bom);
+  --color-bom-bg: var(--bom-bg);
+  --color-regular: var(--regular);
+  --color-regular-bg: var(--regular-bg);
+  --color-critico: var(--critico);
+  --color-critico-bg: var(--critico-bg);
+  --color-serie-1: var(--serie-1);
+  --color-serie-2: var(--serie-2);
+
+  --shadow-card: var(--sombra);
+  --shadow-marca: var(--sombra-marca);
+
+  --ease-saida: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+html {
+  background: var(--bg);
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  background: var(--bg-pagina);
+  background-attachment: fixed;
+  color: var(--fg);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--marca-suave);
+}
+
+/* Foco visível e consistente em tudo que é interativo (WCAG 2.4.7). */
+:focus-visible {
+  outline: 2px solid var(--marca);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* Gráficos: o recharts torna o gráfico focável (navegação por teclado) e o
+   navegador desenhava um contorno preto a cada clique. Clique de mouse não
+   mostra contorno; pelo teclado, o mesmo contorno do resto do sistema. */
+.recharts-wrapper,
+.recharts-surface,
+.recharts-wrapper *:focus {
+  outline: none;
+}
+.recharts-wrapper:has(:focus-visible) {
+  outline: 2px solid var(--marca);
+  outline-offset: 4px;
+  border-radius: 8px;
+}
+
+@layer components {
+  .fundo-hero {
+    background: var(--bg-hero);
+  }
+
+  .vidro {
+    background: var(--card);
+    border: 1px solid var(--borda);
+    box-shadow: var(--sombra);
+    backdrop-filter: blur(14px) saturate(1.2);
+    -webkit-backdrop-filter: blur(14px) saturate(1.2);
+  }
+
+  .campo {
+    width: 100%;
+    border-radius: 0.75rem;
+    border: 1px solid var(--borda);
+    background: var(--campo);
+    color: var(--fg);
+    padding: 0.625rem 0.875rem;
+    font-size: 0.875rem;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .campo:focus {
+    outline: none;
+    border-color: color-mix(in srgb, var(--marca) 60%, transparent);
+    box-shadow: 0 0 0 3px var(--marca-suave);
+  }
+  .campo::placeholder {
+    color: var(--fg-3);
+  }
+  select.campo option {
+    background: var(--bg);
+    color: var(--fg);
+  }
+
+  .num {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Rola (roda, toque, teclado), mas sem a barra visível — como no Roval Escuta. */
+  .sem-barra {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .sem-barra::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

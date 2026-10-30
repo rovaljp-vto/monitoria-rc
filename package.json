@@ -1,0 +1,14 @@
+{
+  "name": "monitoria-qualidade",
+  "private": true,
+  "description": "Checklist Comercial — sistema satélite do RovalConnecta",
+  "scripts": {
+    "instalar": "npm --prefix backend ci && npm --prefix frontend ci",
+    "build": "npm --prefix frontend run build && npm --prefix backend run prisma:generate && npm --prefix backend run build",
+    "banco:migrar": "npm --prefix backend run migrate:deploy",
+    "banco:seed": "npm --prefix backend run seed",
+    "start": "npm --prefix backend run start:prod",
+    "test": "npm --prefix backend test",
+    "typecheck": "npm --prefix backend run typecheck && npm --prefix frontend run typecheck"
+  }
+}

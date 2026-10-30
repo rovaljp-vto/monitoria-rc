@@ -1,0 +1,474 @@
+// Monitoria de Qualidade — modelo de dados (escopo v1.1, §6).
+//
+// Identidade, sessão e trilhas de sync/auditoria seguem o padrão do Chamados TI
+// (GUIA-INTEGRACAO-SISTEMAS.md §7). O domínio de monitoria vem do escopo.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Identidade (replicada do RovalConnecta)
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum EstadoUsuario {
+  PENDENTE // replicado, mas sem permissão que permita sessão
+  ATIVO
+  BLOQUEADO // user.disable
+  EXCLUIDO // user.delete — acesso revogado, autoria de monitorias preservada
+}
+
+enum OrigemCadastro {
+  ROVAL
+  LOCAL
+}
+
+enum ResultadoSync {
+  OK
+  ERRO
+}
+
+model Usuario {
+  id String @id @default(uuid())
+
+  /// Chave estável de associação com o RovalConnecta (GUIA-INTEGRACAO §2).
+  /// Nula no admin local do seed até o superAdmin ser vinculado.
+  codigoFuncionario String? @unique @map("codigo_funcionario")
+
+  rovalUserId   String? @map("roval_user_id")
+  usernameRoval String? @map("username_roval")
+  nomeRoval     String? @map("nome_roval")
+
+  nome     String
+  username String  @unique
+  telefone String?
+  filial   String?
+  setor    String?
+  cargo    String?
+
+  estado EstadoUsuario  @default(PENDENTE)
+  origem OrigemCadastro @default(ROVAL)
+
+  /// Admin local pré-existente — recebe o vínculo do superAdmin do hub.
+  /// Exatamente UM registro true (índice parcial na migration).
+  isAdminLocal       Boolean @default(false) @map("is_admin_local")
+  linkedToRoval      Boolean @default(false) @map("linked_to_roval")
+  permissionsManaged Boolean @default(false) @map("permissions_managed")
+
+  lastRovalSyncAt DateTime? @map("last_roval_sync_at")
+  ultimoAcessoEm  DateTime? @map("ultimo_acesso_em")
+  bloqueadoEm     DateTime? @map("bloqueado_em")
+  excluidoEm      DateTime? @map("excluido_em")
+
+  criadoEm     DateTime @default(now()) @map("criado_em")
+  atualizadoEm DateTime @updatedAt @map("atualizado_em")
+
+  permissoes     UsuarioPermissao[]
+  sessoes        Sessao[]
+  monitorias     Monitoria[]
+  observacoes    Observacao[]
+  feedbacks      Feedback[]
+  versoesCriadas ChecklistVersao[]
+
+  @@index([estado])
+  @@map("usuarios")
+}
+
+model UsuarioPermissao {
+  id          String   @id @default(uuid())
+  usuarioId   String   @map("usuario_id")
+  chave       String
+  concedidaEm DateTime @default(now()) @map("concedida_em")
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@unique([usuarioId, chave])
+  @@index([chave])
+  @@map("usuario_permissoes")
+}
+
+model Sessao {
+  id        String @id @default(uuid())
+  /// SHA-256 do token. O valor cru só existe no cookie HttpOnly.
+  tokenHash String @unique @map("token_hash")
+  usuarioId String @map("usuario_id")
+
+  criadaEm           DateTime  @default(now()) @map("criada_em")
+  ultimoUsoEm        DateTime  @default(now()) @map("ultimo_uso_em")
+  expiraEm           DateTime  @map("expira_em")
+  encerradaEm        DateTime? @map("encerrada_em")
+  motivoEncerramento String?   @map("motivo_encerramento")
+
+  ip        String?
+  userAgent String? @map("user_agent")
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([usuarioId, encerradaEm])
+  @@index([expiraEm])
+  @@map("sessoes")
+}
+
+/// Uso único do token SSO (fecha a pendência de GUIA-SSO.md, "Segurança").
+model SsoTokenUsado {
+  tokenHash String   @id @map("token_hash")
+  usuarioId String?  @map("usuario_id")
+  usadoEm   DateTime @default(now()) @map("usado_em")
+  expiraEm  DateTime @map("expira_em")
+
+  @@index([expiraEm])
+  @@map("sso_tokens_usados")
+}
+
+/// GUIA-INTEGRACAO §7 — registro de cada webhook recebido.
+model SyncLog {
+  id                String        @id @default(uuid())
+  evento            String
+  codigoFuncionario String?       @map("codigo_funcionario")
+  payload           Json
+  resultado         ResultadoSync
+  erroMsg           String?       @map("erro_msg") @db.Text
+  assinaturaOk      Boolean       @map("assinatura_ok")
+  chavesIgnoradas   String[]      @map("chaves_ignoradas")
+  recebidoEm        DateTime      @default(now()) @map("recebido_em")
+
+  @@index([codigoFuncionario, recebidoEm])
+  @@map("roval_sync_log")
+}
+
+/// Append-only por trigger (migration).
+model AuditLog {
+  id       String   @id @default(uuid())
+  acao     String
+  atorId   String?  @map("ator_id")
+  atorNome String?  @map("ator_nome")
+  alvo     String?
+  metadata Json?
+  ip       String?
+  criadoEm DateTime @default(now()) @map("criado_em")
+
+  @@index([acao, criadoEm])
+  @@index([atorId, criadoEm])
+  @@map("audit_logs")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Domínio — cadastros (escopo §4.6)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Loja {
+  id          String    @id @default(uuid())
+  nome        String    @unique
+  ativa       Boolean   @default(true)
+  ordem       Int       @default(0)
+  criadaEm    DateTime  @default(now()) @map("criada_em")
+  /// Regra 6 aplicada a lojas: inativada no mês sai da cobertura daquele mês.
+  inativadaEm DateTime? @map("inativada_em")
+
+  vendedores Vendedor[]
+  monitorias Monitoria[]
+  lotacoes   VendedorLojaPeriodo[]
+
+  @@map("lojas")
+}
+
+model Vendedor {
+  id           String    @id @default(uuid())
+  nome         String
+  lojaId       String    @map("loja_id")
+  ativo        Boolean   @default(true)
+  admissao     DateTime? @db.Date
+  /// Regra 6 — inativado no meio do mês sai da cobertura daquele mês.
+  inativadoEm  DateTime? @map("inativado_em")
+  /// Chave estável de associação com o RovalConnecta (GUIA-INTEGRACAO §2).
+  /// Única quando preenchida; nula em vendedor cadastrado só aqui.
+  codigoFuncionario String? @unique @map("codigo_funcionario")
+  /// ID do usuário no hub. Informativo — o casamento é pelo código.
+  rovalUserId       String? @map("roval_user_id")
+  /// `true` = cadastro e lotação são GERENCIADOS pelo RovalConnecta (evento
+  /// `vendedor.upsert`, com o histórico inteiro em semântica REPLACE). A tela
+  /// de cadastros trava esses campos — mesmo padrão de
+  /// `Usuario.permissionsManaged`.
+  rovalManaged      Boolean @default(false) @map("roval_managed")
+  criadoEm     DateTime  @default(now()) @map("criado_em")
+  atualizadoEm DateTime  @updatedAt @map("atualizado_em")
+
+  loja       Loja                 @relation(fields: [lojaId], references: [id])
+  monitorias Monitoria[]
+  lotacoes   VendedorLojaPeriodo[]
+
+  @@index([lojaId, ativo])
+  @@map("vendedores")
+}
+
+/// Histórico de lotação vendedor↔loja — mesmo modelo do FAC
+/// (`vendedor_filial_periodo`). Cada linha é uma janela [dataInicio, dataFim]
+/// em que o(a) vendedor(a) esteve naquela loja; dataFim nula = lotação atual.
+/// A loja de uma monitoria e a coluna da cobertura de cada mês saem daqui,
+/// então uma transferência não reescreve os meses anteriores.
+/// `Vendedor.lojaId` continua existindo como espelho da lotação ATUAL.
+model VendedorLojaPeriodo {
+  id         String    @id @default(uuid())
+  vendedorId String    @map("vendedor_id")
+  lojaId     String    @map("loja_id")
+  /// Datas puras (sem hora), inclusivas.
+  dataInicio DateTime  @map("data_inicio") @db.Date
+  dataFim    DateTime? @map("data_fim") @db.Date
+  /// Motivo da transferência (texto livre, opcional).
+  motivo     String?
+  criadoEm   DateTime  @default(now()) @map("criado_em")
+
+  vendedor Vendedor @relation(fields: [vendedorId], references: [id], onDelete: Cascade)
+  loja     Loja     @relation(fields: [lojaId], references: [id])
+
+  @@index([vendedorId, dataInicio])
+  @@index([lojaId, dataInicio])
+  @@map("vendedor_loja_periodos")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Domínio — checklists versionados (escopo §3, §4.6; regra 2)
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum TipoModulo {
+  VENDEDOR
+  LOJA
+}
+
+enum TipoResposta {
+  SIM_NAO
+  SIM_NAO_NA
+}
+
+enum RespostaCriterio {
+  SIM
+  NAO
+  NA
+}
+
+enum Faixa {
+  EXCELENTE
+  BOM
+  REGULAR
+  CRITICO
+}
+
+enum CanalAtendimento {
+  BALCAO
+  WHATSAPP
+}
+
+/// Um checklist por módulo; o conteúdo vive nas versões.
+model Checklist {
+  id   String     @id @default(uuid())
+  tipo TipoModulo @unique
+  nome String
+
+  versoes ChecklistVersao[]
+
+  @@map("checklists")
+}
+
+/// Alterar perguntas/pesos cria uma nova versão; monitorias antigas continuam
+/// apontando para a versão com que foram calculadas (regra 2).
+model ChecklistVersao {
+  id           String   @id @default(uuid())
+  checklistId  String   @map("checklist_id")
+  numero       Int
+  vigenteDesde DateTime @default(now()) @map("vigente_desde")
+  ativa        Boolean  @default(true)
+  criadaPorId  String?  @map("criada_por_id")
+
+  checklist  Checklist   @relation(fields: [checklistId], references: [id])
+  criadaPor  Usuario?    @relation(fields: [criadaPorId], references: [id])
+  perguntas  Pergunta[]
+  monitorias Monitoria[]
+
+  @@unique([checklistId, numero])
+  @@map("checklist_versoes")
+}
+
+model Pergunta {
+  id           String       @id @default(uuid())
+  versaoId     String       @map("versao_id")
+  texto        String
+  descricao    String?
+  tipoResposta TipoResposta @default(SIM_NAO) @map("tipo_resposta")
+  peso         Int
+  ordem        Int
+  /// Mensagem dirigida ao avaliado na apresentação de feedback, quando o
+  /// critério foi atendido / não atendido (ex.: "Você foi cordial...").
+  mensagemSim  String?      @map("mensagem_sim") @db.Text
+  mensagemNao  String?      @map("mensagem_nao") @db.Text
+
+  versao    ChecklistVersao     @relation(fields: [versaoId], references: [id])
+  respostas RespostaMonitoria[]
+
+  @@index([versaoId, ordem])
+  @@map("perguntas")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Domínio — monitorias (escopo §4.1, §4.5; regras 2, 5, 7)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Monitoria {
+  id   String     @id @default(uuid())
+  tipo TipoModulo
+
+  /// Nulo em monitoria de loja.
+  vendedorId String?           @map("vendedor_id")
+  /// Loja do atendimento/visita. Em monitoria de vendedor, a loja NO MOMENTO do
+  /// registro — uma transferência posterior não reescreve o histórico.
+  lojaId     String            @map("loja_id")
+  canal      CanalAtendimento?
+
+  /// Data/hora do atendimento avaliado (vendedor) ou da visita (loja).
+  dataReferencia DateTime @map("data_referencia")
+  /// "AAAA-MM" no fuso configurado — chave da cobertura mensal.
+  mesRef         String   @map("mes_ref")
+
+  avaliadorId String @map("avaliador_id")
+  versaoId    String @map("versao_id")
+
+  /// Congelada no registro (regra 2).
+  nota  Decimal @db.Decimal(5, 2)
+  faixa Faixa
+
+  criadaEm DateTime @default(now()) @map("criada_em")
+
+  /// Retificação (Fase 2): editar uma monitoria cria OUTRA com as correções e
+  /// um motivo obrigatório. A original fica preservada (nada é apagado) e sai
+  /// das estatísticas; `retificadaPor` aponta a versão vigente. O índice único
+  /// garante uma retificação por monitoria — corrigir de novo retifica a nova.
+  retificaDeId      String? @unique @map("retifica_de_id")
+  motivoRetificacao String? @map("motivo_retificacao") @db.Text
+
+  retificaDe    Monitoria? @relation("Retificacao", fields: [retificaDeId], references: [id])
+  retificadaPor Monitoria? @relation("Retificacao")
+
+  vendedor    Vendedor?           @relation(fields: [vendedorId], references: [id])
+  loja        Loja                @relation(fields: [lojaId], references: [id])
+  avaliador   Usuario             @relation(fields: [avaliadorId], references: [id])
+  versao      ChecklistVersao     @relation(fields: [versaoId], references: [id])
+  respostas   RespostaMonitoria[]
+  observacoes Observacao[]
+  feedbacks   Feedback[]
+
+  @@index([tipo, mesRef])
+  @@index([vendedorId, dataReferencia])
+  @@index([lojaId, tipo, dataReferencia])
+  @@map("monitorias")
+}
+
+model RespostaMonitoria {
+  id          String           @id @default(uuid())
+  monitoriaId String           @map("monitoria_id")
+  perguntaId  String           @map("pergunta_id")
+  resposta    RespostaCriterio
+  /// Peso efetivo após redistribuição do "Não se aplica" (0 quando N/A).
+  pesoEfetivo Decimal          @map("peso_efetivo") @db.Decimal(7, 4)
+  pontos      Decimal          @db.Decimal(7, 4)
+  /// Observação sobre ESTE critério, escrita no registro (ex.: "não ofereceu o
+  /// complemento"). Aparece no detalhe e na apresentação de feedback.
+  observacao  String?          @db.Text
+
+  monitoria Monitoria @relation(fields: [monitoriaId], references: [id])
+  pergunta  Pergunta  @relation(fields: [perguntaId], references: [id])
+
+  @@unique([monitoriaId, perguntaId])
+  @@map("respostas_monitoria")
+}
+
+/// Regra 7 — têm autor e data, não podem ser apagadas nem editadas (trigger).
+model Observacao {
+  id          String   @id @default(uuid())
+  monitoriaId String   @map("monitoria_id")
+  autorId     String   @map("autor_id")
+  /// Pode ficar vazio quando a observação é só imagem (ex.: print do WhatsApp).
+  texto       String   @db.Text
+  criadaEm    DateTime @default(now()) @map("criada_em")
+
+  monitoria Monitoria         @relation(fields: [monitoriaId], references: [id])
+  autor     Usuario           @relation(fields: [autorId], references: [id])
+  imagens   ImagemObservacao[]
+
+  @@index([monitoriaId, criadaEm])
+  @@map("observacoes")
+}
+
+/// Imagem anexada a uma observação — evidência do atendimento.
+/// Gravada no banco (e não em disco) para o backup do PostgreSQL levar tudo
+/// junto. Só se acrescenta, como a observação (trigger na migration).
+model ImagemObservacao {
+  id           String   @id @default(uuid())
+  /// A imagem pertence a UMA observação ou a UM feedback (CHECK na migration).
+  observacaoId String?  @map("observacao_id")
+  feedbackId   String?  @map("feedback_id")
+  /// Tipo CONFERIDO pelos primeiros bytes do arquivo, não o declarado.
+  mime         String
+  tamanho      Int
+  dados        Bytes
+  criadaEm     DateTime @default(now()) @map("criada_em")
+
+  observacao Observacao? @relation(fields: [observacaoId], references: [id])
+  feedback   Feedback?   @relation(fields: [feedbackId], references: [id])
+
+  @@index([observacaoId])
+  @@index([feedbackId])
+  @@map("imagens_observacao")
+}
+
+/// Conversa de feedback com o vendedor (ou a loja), feita pela apresentação.
+/// Pode acontecer dias depois da monitoria e mais de uma vez. Só se acrescenta
+/// (trigger na migration), como as observações.
+model Feedback {
+  id          String @id @default(uuid())
+  monitoriaId String @map("monitoria_id")
+  autorId     String @map("autor_id")
+
+  /// Nota que o(a) avaliado(a) se deu antes de ver a da monitoria (0–100).
+  autoavaliacao  Int?    @map("autoavaliacao")
+  pontosFortes   String? @map("pontos_fortes") @db.Text
+  pontosMelhorar String? @map("pontos_melhorar") @db.Text
+  combinados     String? @db.Text
+
+  realizadoEm DateTime @default(now()) @map("realizado_em")
+
+  monitoria Monitoria          @relation(fields: [monitoriaId], references: [id])
+  autor     Usuario            @relation(fields: [autorId], references: [id])
+  imagens   ImagemObservacao[]
+
+  @@index([monitoriaId, realizadoEm])
+  @@map("feedbacks")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Parâmetros (escopo §3.4, §4.2, §4.3) — linha única, id = 1
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Parametros {
+  id Int @id @default(1)
+
+  /// Nota mínima de cada faixa; abaixo de regularMin é Crítico.
+  excelenteMin Int @default(90) @map("excelente_min")
+  bomMin       Int @default(75) @map("bom_min")
+  regularMin   Int @default(60) @map("regular_min")
+
+  /// Monitorias por mês: base, e metas ampliadas para quem está em foco.
+  metaBase    Int @default(1) @map("meta_base")
+  metaRegular Int @default(2) @map("meta_regular")
+  metaCritico Int @default(3) @map("meta_critico")
+
+  /// A partir deste dia do mês, pendências ganham destaque.
+  diaAlertaFimMes Int @default(20) @map("dia_alerta_fim_mes")
+
+  atualizadoEm DateTime @updatedAt @map("atualizado_em")
+
+  @@map("parametros")
+}
